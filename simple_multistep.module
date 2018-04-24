@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * @file
+ * Contains simple_multistep.module.
+ */
+
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_form_alter().
+ */
+function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
+  if (_check_form_multistep($form)) {
+    $steps = _get_form_steps($form['#fieldgroups']);
+
+    if (!empty($form_state->get('step'))) {
+      $current_step = $form_state->get('step');
+    }
+    else {
+      $current_step = 0;
+      $form_state->set('step', 0);
+    }
+
+    if (count($steps) - 1 != $current_step) {
+      $form['actions']['next'] = array(
+        '#type' => 'button',
+        '#value' => t('Next'),
+        '#validate' => array('simple_multistep_register_next_step'),
+        '#submit' => array(),
+      );
+      $form['actions']['submit']['#access'] = FALSE;
+
+      //Show back button if needed.
+
+    }
+    else {
+      $form['actions']['submit']['#access'] = TRUE;
+    }
+
+    _set_access_for_form_field($form, $steps, $current_step);
+  }
+}
+
+/**
+ * Get array with form steps.
+ *
+ * @param array $fieldgroups
+ *   Fieldgroups info from $form.
+ *
+ * @return array
+ *   Return steps.
+ */
+function _get_form_steps(array $fieldgroups) {
+  $steps = array();
+
+  if (!empty($fieldgroups) && is_array($fieldgroups)) {
+    foreach ($fieldgroups as $field_group) {
+      if ($field_group->format_type == 'form_step') {
+        $steps[] = $field_group;
+      }
+    }
+    usort($steps, '_sort_objects_by_weight');
+  }
+
+  return $steps;
+}
+
+/**
+ * Sort array by object property.
+ *
+ * @param object $first_object
+ *   First object.
+ * @param object $second_object
+ *   Second object.
+ *
+ * @return int
+ *   Indicator.
+ */
+function _sort_objects_by_weight($first_object, $second_object) {
+  if ($first_object->weight == $second_object->weight) {
+    return 0;
+  }
+  return ($first_object->weight < $second_object->weight) ? -1 : 1;
+}
+
+/**
+ * Set access for form field.
+ */
+function _set_access_for_form_field(&$form, $steps, $current_step) {
+  $limit_validation = array();
+  unset($form['actions']['submit']['#limit_validation_errors']);
+  foreach ($steps as $key => $step) {
+    if ($key != $current_step) {
+      $children = $step->children;
+
+      if (!empty($children)) {
+        foreach ($children as $form_element) {
+          if (isset($form[$form_element])) {
+            $form[$form_element]['#access'] = FALSE;
+
+            if (isset($form[$form_element]['widget']['#required']) &&
+              $form[$form_element]['widget']['#required'] == TRUE) {
+              $limit_validation[] = $form_element;
+            }
+
+          }
+        }
+      }
+    }
+    else {
+
+    }
+  }
+  $form['actions']['next']['#limit_validation_errors'] = array($limit_validation);
+}
+
+/**
+ * Check if valid multistep form.
+ */
+function _check_form_multistep($form) {
+  if (isset($form['#fieldgroups']) && !empty($form['#fieldgroups'])) {
+    foreach ($form['#fieldgroups'] as $fieldgroup) {
+      if (is_object($fieldgroup) && $fieldgroup->format_type == 'form_step') {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Submit handler.
+ */
+function simple_multistep_register_next_step(&$form, FormStateInterface $form_state) {
+  $current_step = $form_state->get('step');
+
+  $steps = _get_form_steps($form['#fieldgroups']);
+  if (count($steps) - 1 > $current_step) {
+    $current_step++;
+    $form_state->set('step', $current_step);
+    $form_state->setRebuild();
+  }
+
+}
