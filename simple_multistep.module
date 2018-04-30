@@ -22,6 +22,7 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
       $form_state->set('step', 0);
     }
 
+    // Show next button.
     if (count($steps) - 1 != $current_step) {
       $form['actions']['next'] = array(
         '#type' => 'button',
@@ -30,14 +31,32 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
         '#submit' => array(),
       );
       $form['actions']['submit']['#access'] = FALSE;
-
-      //Show back button if needed.
-
     }
     else {
       $form['actions']['submit']['#access'] = TRUE;
+      array_unshift($form['actions']['submit']['#submit'], 'simple_multistep_test_submit');
+      //$form['actions']['submit']['#submit'][] = 'simple_multistep_test_submit';
     }
 
+    $step_settings = _get_step_settings($form, $current_step);
+    if (isset($step_settings->format_settings)) {
+      $step_format_settings = $step_settings->format_settings;
+
+      // Show back button.
+      if ($current_step != 0 && isset($step_format_settings['back_button_show'])
+        && $step_format_settings['back_button_show']) {
+        // Add back button and remove validation.
+        $form['actions']['back_button'] = array(
+          '#type' => 'button',
+          '#value' => t('Back'),
+          '#validate' => array('simple_multistep_register_back'),
+          '#submit' => array(),
+          '#limit_validation_errors' => array(),
+        );
+      }
+    }
+
+    // Hide form field from another step.
     _set_access_for_form_field($form, $steps, $current_step);
   }
 }
@@ -109,10 +128,18 @@ function _set_access_for_form_field(&$form, $steps, $current_step) {
       }
     }
     else {
+      $children = $step->children;
 
+      if (!empty($children)) {
+        foreach ($children as $form_element) {
+          if (isset($form[$form_element])) {
+            $limit_validation[] = $form_element;
+            $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
+          }
+        }
+      }
     }
   }
-  $form['actions']['next']['#limit_validation_errors'] = array($limit_validation);
 }
 
 /**
@@ -130,7 +157,31 @@ function _check_form_multistep($form) {
 }
 
 /**
- * Submit handler.
+ * Get form step settings by step.
+ *
+ * @param array $form
+ *   Form settings.
+ * @param int $step
+ *   Number of step.
+ *
+ * @return array
+ *   Array with form step settings.
+ */
+function _get_step_settings(array $form, $step) {
+  $step_settings = array();
+  if (isset($form['#fieldgroups'])) {
+    $form_steps = _get_form_steps($form['#fieldgroups']);
+
+    if (!empty($form_steps) && isset($form_steps[$step])) {
+      $step_settings = $form_steps[$step];
+    }
+  }
+
+  return $step_settings;
+}
+
+/**
+ * Validator handler for next button.
  */
 function simple_multistep_register_next_step(&$form, FormStateInterface $form_state) {
   $current_step = $form_state->get('step');
@@ -142,4 +193,23 @@ function simple_multistep_register_next_step(&$form, FormStateInterface $form_st
     $form_state->setRebuild();
   }
 
+}
+
+/**
+ * Validator handler for back button.
+ */
+function simple_multistep_register_back(&$form, FormStateInterface $form_state) {
+  $current_step = $form_state->get('step');
+
+  // If current_step more than 0.
+  if ($current_step) {
+    $current_step--;
+    $form_state->set('step', $current_step);
+    $form_state->setRebuild();
+  }
+
+}
+
+function simple_multistep_test_submit(&$form, FormStateInterface $form_state) {
+  $id = 1;
 }
