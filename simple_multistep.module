@@ -11,9 +11,9 @@ use Drupal\Core\Form\FormStateInterface;
  * Implements hook_form_alter().
  */
 function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
+  // Check if form using form group multi step field.
   if (_check_form_multistep($form)) {
-    $steps = _get_form_steps($form['#fieldgroups']);
-
+    $steps = _get_form_steps($form);
     if (!empty($form_state->get('step'))) {
       $current_step = $form_state->get('step');
     }
@@ -32,10 +32,10 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
       );
       $form['actions']['submit']['#access'] = FALSE;
     }
+    // On last step hide next button and show save button.
     else {
       $form['actions']['submit']['#access'] = TRUE;
-      array_unshift($form['actions']['submit']['#submit'], 'simple_multistep_test_submit');
-      //$form['actions']['submit']['#submit'][] = 'simple_multistep_test_submit';
+      $form['#validate'][] = 'simple_multistep_multistep_validate';
     }
 
     $step_settings = _get_step_settings($form, $current_step);
@@ -64,17 +64,17 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
 /**
  * Get array with form steps.
  *
- * @param array $fieldgroups
- *   Fieldgroups info from $form.
+ * @param array $form
+ *   Form settings.
  *
  * @return array
  *   Return steps.
  */
-function _get_form_steps(array $fieldgroups) {
+function _get_form_steps(array $form) {
   $steps = array();
 
-  if (!empty($fieldgroups) && is_array($fieldgroups)) {
-    foreach ($fieldgroups as $field_group) {
+  if (isset($form['#fieldgroups']) && is_array($form['#fieldgroups'])) {
+    foreach ($form['#fieldgroups'] as $field_group) {
       if ($field_group->format_type == 'form_step') {
         $steps[] = $field_group;
       }
@@ -107,37 +107,42 @@ function _sort_objects_by_weight($first_object, $second_object) {
  * Set access for form field.
  */
 function _set_access_for_form_field(&$form, $steps, $current_step) {
-  $limit_validation = array();
-  unset($form['actions']['submit']['#limit_validation_errors']);
+  unset($form['actions']['next']['#limit_validation_errors']);
   foreach ($steps as $key => $step) {
-    if ($key != $current_step) {
-      $children = $step->children;
-
-      if (!empty($children)) {
+    $children = $step->children;
+    if (!empty($children)) {
+      // Another step.
+      if ($key != $current_step) {
         foreach ($children as $form_element) {
           if (isset($form[$form_element])) {
             $form[$form_element]['#access'] = FALSE;
 
             if (isset($form[$form_element]['widget']['#required']) &&
               $form[$form_element]['widget']['#required'] == TRUE) {
-              $limit_validation[] = $form_element;
             }
-
           }
         }
       }
     }
-    else {
-      $children = $step->children;
+  }
 
-      if (!empty($children)) {
-        foreach ($children as $form_element) {
-          if (isset($form[$form_element])) {
-            $limit_validation[] = $form_element;
-            $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
-          }
+  // Last step.
+  if ($current_step == count($steps) - 1) {
+    foreach ($form as $element_key => $form_element) {
+      if (is_array($form_element) && isset($form_element['#type'])) {
+        unset($form['actions']['submit']['#limit_validation_errors']);
+        if (isset($form['actions']['next']['#limit_validation_errors'])) {
+          unset($form['actions']['next']['#limit_validation_errors']);
         }
       }
+    }
+  }
+
+  // White list for validation.
+  $white_list = _get_whitelist_for_validation($form, $current_step);
+  if (!empty($white_list)) {
+    foreach ($white_list as $form_element) {
+      $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
     }
   }
 }
@@ -170,7 +175,7 @@ function _check_form_multistep($form) {
 function _get_step_settings(array $form, $step) {
   $step_settings = array();
   if (isset($form['#fieldgroups'])) {
-    $form_steps = _get_form_steps($form['#fieldgroups']);
+    $form_steps = _get_form_steps($form);
 
     if (!empty($form_steps) && isset($form_steps[$step])) {
       $step_settings = $form_steps[$step];
@@ -186,13 +191,19 @@ function _get_step_settings(array $form, $step) {
 function simple_multistep_register_next_step(&$form, FormStateInterface $form_state) {
   $current_step = $form_state->get('step');
 
-  $steps = _get_form_steps($form['#fieldgroups']);
+  $steps = _get_form_steps($form);
   if (count($steps) - 1 > $current_step) {
     $current_step++;
     $form_state->set('step', $current_step);
     $form_state->setRebuild();
   }
 
+  $full_user_input = $form_state->get('full_values');
+  $current_user_input = $form_state->getValues();
+  if (is_array($full_user_input)) {
+    $current_user_input = array_merge($full_user_input, $current_user_input);
+  }
+  $form_state->set('full_values', $current_user_input);
 }
 
 /**
@@ -210,6 +221,74 @@ function simple_multistep_register_back(&$form, FormStateInterface $form_state) 
 
 }
 
-function simple_multistep_test_submit(&$form, FormStateInterface $form_state) {
-  $id = 1;
+/**
+ * Validation handler.
+ */
+function simple_multistep_multistep_validate(&$form, FormStateInterface &$form_state) {
+  $full_user_input = $form_state->get('full_values');
+  $current_user_input = $form_state->getValues();
+  if (is_array($full_user_input)) {
+    $current_user_input = array_merge($current_user_input, $full_user_input);
+  }
+
+  foreach ($current_user_input as $name => $value) {
+    if (isset($form[$name]) && is_array($form[$name])) {
+      $form_state->setValue($name, $value);
+    }
+  }
+}
+
+/**
+ * Get whitelist for validation.
+ *
+ * @param array $form
+ *   Form settings.
+ * @param int $current_step
+ *   Current step number.
+ *
+ * @return array
+ *   List of whitelist.
+ */
+function _get_whitelist_for_validation(array $form, $current_step) {
+  $white_list = array();
+  foreach ($form as $element_key => $form_element) {
+    if (is_array($form_element) && isset($form_element['#type'])) {
+      $white_list[] = $element_key;
+    }
+  }
+
+  $white_list = _remove_pending_field($form, $white_list, $current_step);
+  return $white_list;
+}
+
+/**
+ * Remove pending field from whitelist.
+ *
+ * @param array $form
+ *   Form settings.
+ * @param array $field_list
+ *   Field list.
+ * @param int $current_step
+ *   Curent step.
+ *
+ * @return array
+ *   Filtered array.
+ */
+function _remove_pending_field(array $form, array $field_list, $current_step) {
+  $steps = _get_form_steps($form);
+  foreach ($steps as $step_number => $step) {
+    if ($step_number > $current_step && isset($step->children)) {
+      $children = $step->children;
+
+      if (!empty($children)) {
+        foreach ($children as $child) {
+          if (($key = array_search($child, $field_list)) !== FALSE) {
+            unset($field_list[$key]);
+          }
+        }
+      }
+    }
+  }
+
+  return $field_list;
 }
