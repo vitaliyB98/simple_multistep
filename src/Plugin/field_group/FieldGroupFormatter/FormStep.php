@@ -2,9 +2,6 @@
 
 namespace Drupal\simple_multistep\Plugin\field_group\FieldGroupFormatter;
 
-use Drupal\Component\Utility\Html;
-use Drupal\Core\Form\FormState;
-use Drupal\Core\Template\Attribute;
 use Drupal\field_group\FieldGroupFormatterBase;
 
 /**
@@ -24,146 +21,42 @@ class FormStep extends FieldGroupFormatterBase {
   /**
    * {@inheritdoc}
    */
-  public function preRender(&$element, $rendering_object) {
-    parent::preRender($element, $rendering_object);
-
-    /*$element_attributes = new Attribute();
-
-    if ($this->getSetting('attributes')) {
-
-      // This regex split the attributes string so that we can pass that
-      // later to drupal_attributes().
-      preg_match_all('/([^\s=]+)="([^"]+)"/', $this->getSetting('attributes'), $matches);
-
-      // Put the attribute and the value together.
-      foreach ($matches[1] as $key => $attribute) {
-        $element_attributes[$attribute] = $matches[2][$key];
-      }
-
-    }
-
-    // Add the id to the attributes array.
-    if ($this->getSetting('id')) {
-      $element_attributes['id'] = Html::getId($this->getSetting('id'));
-    }
-
-    // Add the classes to the attributes array.
-    $classes = $this->getClasses();
-    if (!empty($classes)) {
-      if (!isset($element_attributes['class'])) {
-        $element_attributes['class'] = array();
-      }
-      // If user also entered class in the attributes textfield, force it to an array.
-      else {
-        $element_attributes['class'] = array($element_attributes['class']);
-      }
-      $element_attributes['class'] = array_merge($classes, $element_attributes['class']->value());
-    }
-
-    $element['#effect'] = $this->getSetting('effect');
-    $element['#speed'] = $this->getSetting('speed');
-    $element['#type'] = 'field_group_form_step';
-    //$element['#wrapper_element'] = $this->getSetting('element');
-    $element['#attributes'] = $element_attributes;
-    if ($this->getSetting('show_label')) {
-      $element['#title_element'] = $this->getSetting('label_element');
-      $element['#title'] = Html::escape($this->t($this->getLabel()));
-    }
-
-    $form_state = new FormState();
-    \Drupal\field_group\Element\HtmlElement::processHtmlElement($element, $form_state);
-
-    if ($this->getSetting('required_fields')) {
-      $element['#attributes']['class'][] = 'field-group-html-element';
-      $element['#attached']['library'][] = 'field_group/formatter.form_step';
-      $element['#attached']['library'][] = 'field_group/core';
-    }*/
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public function settingsForm() {
 
     $form = parent::settingsForm();
 
     $form['label']['#title'] = $this->t('Step title');
 
+    $form['show_step_title'] = array(
+      '#title' => $this->t('Show step title'),
+      '#type' => 'checkbox',
+      '#default_value' => $this->getSetting('show_step_title'),
+      '#description' => $this->t('Show step title'),
+      '#weight' => 1,
+    );
+
     $form['back_button_show'] = array(
       '#title' => $this->t('Show back button'),
       '#type' => 'checkbox',
       '#default_value' => $this->getSetting('back_button_show'),
       '#description' => $this->t('Back button for form. Don`t show on first step'),
-      '#weight' => 1,
-    );
-/*
-    $form['show_label'] = array(
-      '#title' => $this->t('Show label'),
-      '#type' => 'select',
-      '#options' => array(0 => $this->t('No'), 1 => $this->t('Yes')),
-      '#default_value' => $this->getSetting('show_label'),
       '#weight' => 2,
-      '#attributes' => array(
-        'data-fieldgroup-selector' => 'show_label'
-      ),
     );
 
-    $form['label_element'] = array(
-      '#title' => $this->t('Label element'),
+    $form['back_button_text'] = array(
+      '#title' => $this->t('Text for back button'),
       '#type' => 'textfield',
-      '#default_value' => $this->getSetting('label_element'),
-      '#weight' => 3,
-      '#states' => array(
-        'visible' => array(
-          ':input[data-fieldgroup-selector="show_label"]' => array('value' => 1),
-        ),
-      ),
+      '#default_value' => $this->getSetting('back_button_text'),
+      '#description' => $this->t('Text which will be show on back button'),
+      '#weight' => $form['back_button_show']['#weight'] + 0.1,
     );
 
-    if ($this->context == 'form') {
-      $form['required_fields'] = array(
-        '#title' => $this->t('Mark group as required if it contains required fields.'),
-        '#type' => 'checkbox',
-        '#default_value' => $this->getSetting('required_fields'),
-        '#weight' => 4,
-      );
-    }
-
-    $form['attributes'] = array(
-      '#title' => $this->t('Attributes'),
+    $form['next_button_text'] = array(
+      '#title' => $this->t('Text for next button'),
       '#type' => 'textfield',
-      '#default_value' => $this->getSetting('attributes'),
-      '#description' => $this->t('E.g. name="anchor"'),
-      '#weight' => 5,
+      '#default_value' => $this->getSetting('next_button_text'),
+      '#description' => $this->t('Text which will be show on next button'),
     );
-
-    $form['effect'] = array(
-      '#title' => $this->t('Effect'),
-      '#type' => 'select',
-      '#options' => array(
-        'none' => $this->t('None'),
-        'collapsible' => $this->t('Collapsible'),
-        'blind' => $this->t('Blind')
-      ),
-      '#default_value' => $this->getSetting('effect'),
-      '#weight' => 6,
-      '#attributes' => array(
-        'data-fieldgroup-selector' => 'effect'
-      ),
-    );
-
-    $form['speed'] = array(
-      '#title' => $this->t('Speed'),
-      '#type' => 'select',
-      '#options' => array('slow' => $this->t('Slow'), 'fast' => $this->t('Fast')),
-      '#default_value' => $this->getSetting('speed'),
-      '#weight' => 7,
-      '#states' => array(
-        '!visible' => array(
-          ':input[data-fieldgroup-selector="effect"]' => array('value' => 'none'),
-        ),
-      ),
-    );*/
 
     return $form;
   }
@@ -177,25 +70,9 @@ class FormStep extends FieldGroupFormatterBase {
     $summary[] = $this->t('Back button: @element',
       array('@element' => $this->getSetting('back_button_show') ? 'Show' : 'Hide')
     );
-    /*$summary[] = $this->t('Element: @element',
-      array('@element' => $this->getSetting('step_title'))
+    $summary[] = $this->t('Show title: @element',
+      array('@element' => $this->getSetting('show_step_title') ? 'Show' : 'Hide')
     );
-
-    if ($this->getSetting('show_label')) {
-      $summary[] = $this->t('Label element: @element',
-        array('@element' => $this->getSetting('label_element'))
-      );
-    }
-
-    if ($this->getSetting('attributes')) {
-      $summary[] = $this->t('Attributes: @attributes',
-        array('@attributes' => $this->getSetting('attributes'))
-      );
-    }
-
-    if ($this->getSetting('required_fields')) {
-      $summary[] = $this->t('Mark as required');
-    }*/
 
     return $summary;
   }
@@ -206,12 +83,9 @@ class FormStep extends FieldGroupFormatterBase {
   public static function defaultContextSettings($context) {
     $defaults = array(
       'back_button_show' => FALSE,
-      /*'step_title' => 'div',
-      'show_label' => 0,
-      'label_element' => 'h3',
-      'effect' => 'none',
-      'speed' => 'fast',
-      'attributes' => '',*/
+      'back_button_text' => t('Back'),
+      'next_button_text' => t('Next'),
+      'show_step_title' => FALSE,
     ) + parent::defaultSettings($context);
 
     if ($context == 'form') {

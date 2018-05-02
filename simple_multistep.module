@@ -6,6 +6,7 @@
  */
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\simple_multistep\MultistepController;
 
 /**
  * Implements hook_form_alter().
@@ -14,6 +15,7 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
   // Check if form using form group multi step field.
   if (_check_form_multistep($form)) {
     $steps = _get_form_steps($form);
+
     if (!empty($form_state->get('step'))) {
       $current_step = $form_state->get('step');
     }
@@ -22,11 +24,28 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
       $form_state->set('step', 0);
     }
 
+    $form['steps_label'] = _format_steps_label_section($steps, $current_step);
+    $step_settings = _get_step_settings($form, $current_step);
+    $step_format_settings = $step_settings->format_settings;
+
+    // Show back button.
+    if ($current_step != 0 && isset($step_format_settings['back_button_show'])
+      && $step_format_settings['back_button_show']) {
+      // Add back button and remove validation.
+      $form['actions']['back_button'] = array(
+        '#type' => 'button',
+        '#value' => $step_format_settings["back_button_text"],
+        '#validate' => array('simple_multistep_register_back'),
+        '#submit' => array(),
+        '#limit_validation_errors' => array(),
+      );
+    }
+
     // Show next button.
     if (count($steps) - 1 != $current_step) {
       $form['actions']['next'] = array(
         '#type' => 'button',
-        '#value' => t('Next'),
+        '#value' => $step_format_settings['next_button_text'],
         '#validate' => array('simple_multistep_register_next_step'),
         '#submit' => array(),
       );
@@ -36,24 +55,6 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
     else {
       $form['actions']['submit']['#access'] = TRUE;
       $form['#validate'][] = 'simple_multistep_multistep_validate';
-    }
-
-    $step_settings = _get_step_settings($form, $current_step);
-    if (isset($step_settings->format_settings)) {
-      $step_format_settings = $step_settings->format_settings;
-
-      // Show back button.
-      if ($current_step != 0 && isset($step_format_settings['back_button_show'])
-        && $step_format_settings['back_button_show']) {
-        // Add back button and remove validation.
-        $form['actions']['back_button'] = array(
-          '#type' => 'button',
-          '#value' => t('Back'),
-          '#validate' => array('simple_multistep_register_back'),
-          '#submit' => array(),
-          '#limit_validation_errors' => array(),
-        );
-      }
     }
 
     // Hide form field from another step.
@@ -116,10 +117,13 @@ function _set_access_for_form_field(&$form, $steps, $current_step) {
         foreach ($children as $form_element) {
           if (isset($form[$form_element])) {
             $form[$form_element]['#access'] = FALSE;
-
-            if (isset($form[$form_element]['widget']['#required']) &&
-              $form[$form_element]['widget']['#required'] == TRUE) {
-            }
+          }
+        }
+      }
+      else {
+        foreach ($children as $form_element) {
+          if (isset($form[$form_element])) {
+            $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
           }
         }
       }
@@ -135,14 +139,6 @@ function _set_access_for_form_field(&$form, $steps, $current_step) {
           unset($form['actions']['next']['#limit_validation_errors']);
         }
       }
-    }
-  }
-
-  // White list for validation.
-  $white_list = _get_whitelist_for_validation($form, $current_step);
-  if (!empty($white_list)) {
-    foreach ($white_list as $form_element) {
-      $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
     }
   }
 }
@@ -169,8 +165,8 @@ function _check_form_multistep($form) {
  * @param int $step
  *   Number of step.
  *
- * @return array
- *   Array with form step settings.
+ * @return object
+ *   Object with form step settings.
  */
 function _get_step_settings(array $form, $step) {
   $step_settings = array();
@@ -186,6 +182,31 @@ function _get_step_settings(array $form, $step) {
 }
 
 /**
+ * Get stored vales for current step.
+ *
+ * @param object $step
+ *   Current step params.
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ *   Form state.
+ *
+ * @return array
+ *   Value list.
+ */
+function _get_step_values($step, FormStateInterface $form_state) {
+  $list_value = array();
+
+  if (!empty($step->children)) {
+    $current_user_input = $form_state->getValues();
+    foreach ($step->children as $field_name) {
+      if (isset($current_user_input[$field_name])) {
+        $list_value[$field_name] = $current_user_input[$field_name];
+      }
+    }
+  }
+  return $list_value;
+}
+
+/**
  * Validator handler for next button.
  */
 function simple_multistep_register_next_step(&$form, FormStateInterface $form_state) {
@@ -198,12 +219,14 @@ function simple_multistep_register_next_step(&$form, FormStateInterface $form_st
     $form_state->setRebuild();
   }
 
-  $full_user_input = $form_state->get('full_values');
-  $current_user_input = $form_state->getValues();
-  if (is_array($full_user_input)) {
-    $current_user_input = array_merge($full_user_input, $current_user_input);
-  }
-  $form_state->set('full_values', $current_user_input);
+
+  $stored_input = $form_state->get('stored_input');
+  $stored_input[$current_step - 1] = $form_state->getUserInput();
+  $form_state->set('stored_input', $stored_input);
+
+  $stored_values = $form_state->get('stored_values');
+  $stored_values[$current_step - 1] = _get_step_values($steps[$current_step - 1], $form_state);
+  $form_state->set('stored_values', $stored_values);
 }
 
 /**
@@ -216,6 +239,13 @@ function simple_multistep_register_back(&$form, FormStateInterface $form_state) 
   if ($current_step) {
     $current_step--;
     $form_state->set('step', $current_step);
+
+    // Fill field value previous step.
+    $stored_input = $form_state->get('stored_input');
+    if (isset($stored_input[$current_step]) && !empty($stored_input[$current_step])) {
+      $form_state->setUserInput($stored_input[$current_step]);
+    }
+
     $form_state->setRebuild();
   }
 
@@ -225,40 +255,15 @@ function simple_multistep_register_back(&$form, FormStateInterface $form_state) 
  * Validation handler.
  */
 function simple_multistep_multistep_validate(&$form, FormStateInterface &$form_state) {
-  $full_user_input = $form_state->get('full_values');
-  $current_user_input = $form_state->getValues();
-  if (is_array($full_user_input)) {
-    $current_user_input = array_merge($current_user_input, $full_user_input);
-  }
+  $stored_values = $form_state->get('stored_values');
 
-  foreach ($current_user_input as $name => $value) {
-    if (isset($form[$name]) && is_array($form[$name])) {
-      $form_state->setValue($name, $value);
+  if (!empty($stored_values)) {
+    foreach ($stored_values as $step => $value_list) {
+      foreach ($value_list as $field_name => $field_value) {
+        $form_state->setValue($field_name, $field_value);
+      }
     }
   }
-}
-
-/**
- * Get whitelist for validation.
- *
- * @param array $form
- *   Form settings.
- * @param int $current_step
- *   Current step number.
- *
- * @return array
- *   List of whitelist.
- */
-function _get_whitelist_for_validation(array $form, $current_step) {
-  $white_list = array();
-  foreach ($form as $element_key => $form_element) {
-    if (is_array($form_element) && isset($form_element['#type'])) {
-      $white_list[] = $element_key;
-    }
-  }
-
-  $white_list = _remove_pending_field($form, $white_list, $current_step);
-  return $white_list;
 }
 
 /**
@@ -291,4 +296,37 @@ function _remove_pending_field(array $form, array $field_list, $current_step) {
   }
 
   return $field_list;
+}
+
+/**
+ * Title with form step.
+ *
+ * @param array $steps
+ *   Steps list.
+ * @param int $current_step
+ *   Current step.
+ *
+ * @return array
+ *   Markup settings for "steps_label" field
+ */
+function _format_steps_label_section(array $steps, $current_step) {
+  $steps_label = array(
+    '#type' => 'item',
+    '#weight' => -9999,
+  );
+
+  $markup = '<div class="multi-steps-label">';
+  foreach ($steps as $step_number => $step) {
+    $format_settings = $step->format_settings;
+    if ($format_settings['show_step_title']) {
+      $active = $current_step == $step_number ? ' active' : '';
+      $markup .= '<div class="step-label' . $active . '">';
+      $markup .= $step->label;
+      $markup .= '</div>';
+    }
+  }
+  $markup .= '</div>';
+
+  $steps_label['#markup'] = $markup;
+  return $steps_label;
 }
