@@ -21,6 +21,31 @@ class FormStep extends FieldGroupFormatterBase {
   /**
    * {@inheritdoc}
    */
+  public function preRender(&$element, $rendering_object) {
+    $element += array(
+      '#type' => 'container',
+      '#pre_render' => array(),
+      '#attributes' => array(),
+    );
+
+    if ($this->getSetting('id')) {
+      $element['#attributes']['id'] = $this->getSetting('id');
+    }
+
+    $classes = $this->getClasses();
+    if (!empty($classes)) {
+      $element['#attributes']['class'] = $classes;
+    }
+
+    if ($this->getSetting('required_fields')) {
+      $element['#attached']['library'][] = 'field_group/formatter.fieldset';
+      $element['#attached']['library'][] = 'field_group/core';
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function settingsForm() {
 
     $form = parent::settingsForm();
@@ -85,7 +110,7 @@ class FormStep extends FieldGroupFormatterBase {
       'back_button_show' => FALSE,
       'back_button_text' => t('Back'),
       'next_button_text' => t('Next'),
-      'show_step_title' => FALSE,
+      'show_step_title' => TRUE,
     ) + parent::defaultSettings($context);
 
     if ($context == 'form') {

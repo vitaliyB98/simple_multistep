@@ -14,6 +14,7 @@ use Drupal\simple_multistep\MultistepController;
 function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
   // Check if form using form group multi step field.
   if (_check_form_multistep($form)) {
+    //$multiStep = new MultistepController($form, $form_state);
     $steps = _get_form_steps($form);
 
     if (!empty($form_state->get('step'))) {
@@ -59,6 +60,9 @@ function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $f
 
     // Hide form field from another step.
     _set_access_for_form_field($form, $steps, $current_step);
+
+    // Attach style library.
+    $form['#attached']['library'][] = 'simple_multistep/simple_multistep';
   }
 }
 
@@ -110,20 +114,20 @@ function _sort_objects_by_weight($first_object, $second_object) {
 function _set_access_for_form_field(&$form, $steps, $current_step) {
   unset($form['actions']['next']['#limit_validation_errors']);
   foreach ($steps as $key => $step) {
-    $children = $step->children;
-    if (!empty($children)) {
+    $all_children = _get_all_child($form, $step);
+    if (!empty($all_children)) {
       // Another step.
       if ($key != $current_step) {
-        foreach ($children as $form_element) {
-          if (isset($form[$form_element])) {
-            $form[$form_element]['#access'] = FALSE;
+        foreach ($all_children as $child_id) {
+          if (isset($form[$child_id])) {
+            $form[$child_id]['#access'] = FALSE;
           }
         }
       }
       else {
-        foreach ($children as $form_element) {
-          if (isset($form[$form_element])) {
-            $form['actions']['next']['#limit_validation_errors'][] = array($form_element);
+        foreach ($all_children as $child_id) {
+          if (isset($form[$child_id])) {
+            $form['actions']['next']['#limit_validation_errors'][] = array($child_id);
           }
         }
       }
@@ -141,6 +145,34 @@ function _set_access_for_form_field(&$form, $steps, $current_step) {
       }
     }
   }
+}
+
+/**
+ * Get all children element recursive.
+ *
+ * @param array $form
+ *   Form.
+ * @param object $fieldgroup
+ *   Form element ID.
+ * @param array $child
+ *   Array with child.
+ *
+ * @return array
+ *   Form.
+ */
+function _get_all_child(array $form, $fieldgroup, array $child = []) {
+  if ($group_children = $fieldgroup->children) {
+    foreach ($group_children as $form_element_id) {
+      if (isset($form[$form_element_id])) {
+        $child[] = $form_element_id;
+      }
+      elseif (isset($form['#fieldgroups'][$form_element_id]->children)) {
+        $child = _get_all_child($form, $form['#fieldgroups'][$form_element_id], $child);
+      }
+    }
+  }
+
+  return $child;
 }
 
 /**
@@ -184,6 +216,8 @@ function _get_step_settings(array $form, $step) {
 /**
  * Get stored vales for current step.
  *
+ * @param array $form
+ *   Array form.
  * @param object $step
  *   Current step params.
  * @param \Drupal\Core\Form\FormStateInterface $form_state
@@ -192,15 +226,14 @@ function _get_step_settings(array $form, $step) {
  * @return array
  *   Value list.
  */
-function _get_step_values($step, FormStateInterface $form_state) {
+function _get_step_values(array $form, $step, FormStateInterface $form_state) {
   $list_value = array();
+  $all_children = _get_all_child($form, $step);
+  $current_user_input = $form_state->getValues();
 
-  if (!empty($step->children)) {
-    $current_user_input = $form_state->getValues();
-    foreach ($step->children as $field_name) {
-      if (isset($current_user_input[$field_name])) {
-        $list_value[$field_name] = $current_user_input[$field_name];
-      }
+  foreach ($all_children as $field_name) {
+    if (isset($current_user_input[$field_name])) {
+      $list_value[$field_name] = $current_user_input[$field_name];
     }
   }
   return $list_value;
@@ -225,7 +258,7 @@ function simple_multistep_register_next_step(&$form, FormStateInterface $form_st
   $form_state->set('stored_input', $stored_input);
 
   $stored_values = $form_state->get('stored_values');
-  $stored_values[$current_step - 1] = _get_step_values($steps[$current_step - 1], $form_state);
+  $stored_values[$current_step - 1] = _get_step_values($form, $steps[$current_step - 1], $form_state);
   $form_state->set('stored_values', $stored_values);
 }
 
@@ -312,7 +345,7 @@ function _remove_pending_field(array $form, array $field_list, $current_step) {
 function _format_steps_label_section(array $steps, $current_step) {
   $steps_label = array(
     '#type' => 'item',
-    '#weight' => -9999,
+    '#weight' => -1,
   );
 
   $markup = '<div class="multi-steps-label">';
