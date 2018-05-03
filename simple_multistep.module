@@ -14,18 +14,15 @@ use Drupal\simple_multistep\MultistepController;
 function simple_multistep_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
   // Check if form using form group multi step field.
   if (_check_form_multistep($form)) {
-    //$multiStep = new MultistepController($form, $form_state);
-    $steps = _get_form_steps($form);
-
-    if (!empty($form_state->get('step'))) {
-      $current_step = $form_state->get('step');
-    }
-    else {
-      $current_step = 0;
+    if (empty($form_state->get('step'))) {
       $form_state->set('step', 0);
     }
 
-    $form['steps_label'] = _format_steps_label_section($steps, $current_step);
+    $multiStep = new MultistepController($form, $form_state);
+    $steps = $multiStep->getSteps();
+    $current_step = $multiStep->getCurrentStep();
+
+    $form['steps_label'] = $multiStep->stepIndicator->render();
     $step_settings = _get_step_settings($form, $current_step);
     $step_format_settings = $step_settings->format_settings;
 
@@ -329,37 +326,4 @@ function _remove_pending_field(array $form, array $field_list, $current_step) {
   }
 
   return $field_list;
-}
-
-/**
- * Title with form step.
- *
- * @param array $steps
- *   Steps list.
- * @param int $current_step
- *   Current step.
- *
- * @return array
- *   Markup settings for "steps_label" field
- */
-function _format_steps_label_section(array $steps, $current_step) {
-  $steps_label = array(
-    '#type' => 'item',
-    '#weight' => -1,
-  );
-
-  $markup = '<div class="multi-steps-label">';
-  foreach ($steps as $step_number => $step) {
-    $format_settings = $step->format_settings;
-    if ($format_settings['show_step_title']) {
-      $active = $current_step == $step_number ? ' active' : '';
-      $markup .= '<div class="step-label' . $active . '">';
-      $markup .= $step->label;
-      $markup .= '</div>';
-    }
-  }
-  $markup .= '</div>';
-
-  $steps_label['#markup'] = $markup;
-  return $steps_label;
 }
